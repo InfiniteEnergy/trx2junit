@@ -8,7 +8,7 @@ namespace trx2junit
 {
     public class JUnitBuilder : IJUnitBuilder
     {
-        private readonly Test     _test;
+        private readonly Test[]   _tests;
         private readonly XElement _xJUnit = new XElement("testsuites");
         private int               _testId;
         private int               _errors;
@@ -19,11 +19,13 @@ namespace trx2junit
         //---------------------------------------------------------------------
         public XElement Result => _xJUnit;
         //---------------------------------------------------------------------
-        public JUnitBuilder(Test test) => _test = test ?? throw new ArgumentNullException(nameof(test));
+        public JUnitBuilder(Test[] tests) => _tests = tests ?? throw new ArgumentNullException(nameof(tests));
         //---------------------------------------------------------------------
         public void Build()
         {
-            var testSuites = _test.TestDefinitions.GroupBy(t => t.Value.TestClass);
+            var testSuites = _tests
+              .SelectMany(t => t.TestDefinitions)
+              .GroupBy(t => t.Value.TestClass);
 
             foreach (var testSuite in testSuites)
                 this.AddTestSuite(testSuite.Key, testSuite);
@@ -31,6 +33,8 @@ namespace trx2junit
         //---------------------------------------------------------------------
         private void AddTestSuite(string testSuiteName, IEnumerable<KeyValuePair<Guid, TestDefinition>> tests)
         {
+            _errors = _failures = _testCount = 0;
+            _time = TimeSpan.FromSeconds(0);
             var xTestSuite = new XElement("testsuite");
 
             xTestSuite.Add(new XAttribute("name"    , testSuiteName));
@@ -66,7 +70,9 @@ namespace trx2junit
             xTestCase.Add(new XAttribute("name"     , test.Value.TestMethod));
 
             Guid executionId              = test.Value.ExecutionId;
-            UnitTestResult unitTestResult = _test.UnitTestResults[executionId];
+            UnitTestResult unitTestResult = _tests
+                .First(t => t.UnitTestResults.ContainsKey(executionId))
+                .UnitTestResults[executionId];
 
             if (!_timeStamp.HasValue) _timeStamp = unitTestResult.StartTime;
 
